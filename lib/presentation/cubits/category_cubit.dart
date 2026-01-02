@@ -68,7 +68,14 @@ class CategoryCubit extends Cubit<CategoryState> {
   Future<void> loadCategories() async {
     emit(CategoryLoading());
     try {
-      final categories = await _repository.getCategories();
+      final fetchedCategories = await _repository.getCategories();
+      
+      // Inject "Offers" category
+      final categories = [
+        ...fetchedCategories,
+        const Category(id: -100, name: 'العروض'),
+      ];
+
       emit(CategoryLoaded(categories: categories));
       
       // Select first category by default if available
@@ -85,6 +92,17 @@ class CategoryCubit extends Cubit<CategoryState> {
     if (currentState is! CategoryLoaded) return;
 
     try {
+      if (category.id == -100) {
+        // Special case for Offers
+        emit(currentState.copyWith(
+          selectedCategory: category,
+          subCategories: [],
+          selectedSubCategory: null,
+          clearSelectedSubCategory: true,
+        ));
+        return;
+      }
+
       // Load subcategories for this category
       final subCategories = await _repository.getSubCategoriesByCategory(category.id);
       

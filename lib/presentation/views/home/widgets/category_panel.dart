@@ -50,13 +50,17 @@ class CategoryPanel extends StatelessWidget {
                   final category = state.categories[index];
                   final isSelected = category == state.selectedCategory;
                   return GestureDetector(
-                    onTap: () {
-                      context.read<CategoryCubit>().selectCategory(category);
-                      // Filter products by category
-                      context.read<ProductsCubit>().filterByCategory(
-                        category.id,
-                      );
-                    },
+                      onTap: () {
+                        context.read<CategoryCubit>().selectCategory(category);
+                        // Filter products by category
+                        if (category.id == -100) {
+                          context.read<ProductsCubit>().loadOffers();
+                        } else {
+                          context.read<ProductsCubit>().filterByCategory(
+                            category.id,
+                          );
+                        }
+                      },
                     child: Container(
                       width: 150,
                       margin: const EdgeInsets.all(8),
