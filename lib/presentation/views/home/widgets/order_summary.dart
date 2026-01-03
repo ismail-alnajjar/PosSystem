@@ -3,13 +3,131 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:pos/core/constants/app_colors.dart';
 import 'package:pos/data/models/cart_item_model.dart';
+import 'package:pos/data/models/order_model.dart'; // Import Order
+import 'package:pos/data/services/qz_tray_service.dart'; // Import Service
 import 'package:pos/presentation/cubits/order_cubit.dart';
 import 'package:pos/presentation/views/receipt/receipt_preview_screen.dart';
 
-class OrderSummary extends StatelessWidget {
+class OrderSummary extends StatefulWidget {
   final ScrollController? scrollController;
 
   const OrderSummary({super.key, this.scrollController});
+
+  @override
+  State<OrderSummary> createState() => _OrderSummaryState();
+}
+
+class _OrderSummaryState extends State<OrderSummary> {
+  late final QzTrayService _qzTrayService;
+  // ignore: unused_field
+  String? _selectedPrinter;
+
+  @override
+  void initState() {
+    super.initState();
+    _qzTrayService = QzTrayService();
+    _initPrinter();
+  }
+
+  Future<void> _initPrinter() async {
+    final connected = await _qzTrayService.connect();
+    if (connected) {
+      // Listen for printer list response
+      _qzTrayService.onMessage.listen((data) {
+        // Simple logic to pick a printer from response if applicable
+        // valid response handling depends on QZ version.
+        // For now we assume the user has a printer named "POS-80" or uses default.
+        if (data.containsKey('printers')) {
+          // Handle printer list
+        }
+      });
+      // Trigger find
+      _qzTrayService.findPrinters();
+    }
+  }
+
+  @override
+  void dispose() {
+    _qzTrayService.dispose();
+    super.dispose();
+  }
+
+  String _generateReceiptHtml(Order order, List<CartItem> items) {
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+    final formattedDate = dateFormat.format(order.orderDate);
+
+    // Generate Items Rows
+    String itemsHtml = '';
+    for (var item in items) {
+      itemsHtml +=
+          '''
+        <tr>
+          <td style="padding: 5px 0; text-align: right;">${item.product.name}</td>
+          <td style="text-align: center;">${item.quantity}</td>
+          <td style="text-align: left;">${item.total.toStringAsFixed(2)}</td>
+        </tr>
+      ''';
+    }
+
+    return '''
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { 
+            font-family: 'Tahoma', 'Arial', sans-serif; 
+            font-size: 12px; 
+            width: 100%; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #fff;
+          }
+          .header { text-align: center; margin-bottom: 10px; }
+          .header h2 { margin: 0; font-size: 16px; font-weight: bold; }
+          .header p { margin: 2px 0; font-size: 12px; }
+          
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { border-bottom: 1px dashed #000; padding: 5px 0; font-weight: bold; font-size: 12px; }
+          td { padding: 5px 0; vertical-align: top; font-size: 12px; }
+          
+          .totals { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; }
+          .footer { text-align: center; margin-top: 20px; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>نظام نقاط البيع</h2>
+          <p>طلب رقم #${order.id}</p>
+          <p>$formattedDate</p>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: right; width: 45%;">الصنف</th>
+              <th style="text-align: center; width: 20%;">العدد</th>
+              <th style="text-align: left; width: 35%;">السعر</th>
+            </tr>
+          </thead>
+          <tbody>
+            $itemsHtml
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
+            <span>المجموع</span>
+            <span>${order.totalAmount.toStringAsFixed(2)}</span>
+          </div>
+        </div>
+        
+        <div class="footer">
+          <p>شكرًا لزيارتكم!</p>
+        </div>
+      </body>
+      </html>
+    ''';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +155,14 @@ class OrderSummary extends StatelessWidget {
             child: BlocConsumer<OrderCubit, OrderState>(
               listener: (context, state) {
                 if (state is OrderSubmitted) {
+                  // Print Receipt
+                  // Use a specific printer name or default
+                  // Ensure you update 'Reference POS' to your actual printer name
+                  _qzTrayService.printHtmlReceipt(
+                    "Reference POS",
+                    _generateReceiptHtml(state.order, state.items),
+                  );
+
                   // Navigate to Receipt Preview
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -91,7 +217,7 @@ class OrderSummary extends StatelessWidget {
                 }
 
                 return ListView.builder(
-                  controller: scrollController,
+                  controller: widget.scrollController,
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     return _CartItemTile(item: items[index]);
@@ -187,7 +313,7 @@ class OrderSummary extends StatelessWidget {
                               backgroundColor: AppColors.accent,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                             ),
-                                    child: isSubmitting
+                            child: isSubmitting
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,

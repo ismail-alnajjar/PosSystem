@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
+import 'package:pos/core/constants/app_colors.dart';
 import 'package:pos/data/models/cart_item_model.dart';
 import 'package:pos/data/models/order_model.dart';
 import 'package:pos/presentation/cubits/order_cubit.dart';
@@ -12,91 +10,156 @@ class ReceiptPreviewScreen extends StatelessWidget {
   final Order order;
   final List<CartItem> items;
 
-  const ReceiptPreviewScreen({super.key, required this.order, required this.items});
+  const ReceiptPreviewScreen({
+    super.key,
+    required this.order,
+    required this.items,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+    final currencyFormat = NumberFormat.simpleCurrency();
+
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('معاينة الفاتورة - تجربة'),
+        title: const Text(
+          'تم الطلب بنجاح',
+          style: TextStyle(color: Colors.black),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () {
-            context.read<OrderCubit>().startNewOrder();
-            Navigator.of(context).pop();
+            _finishOrder(context);
           },
         ),
       ),
-      body: Center(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.receipt_long, size: 100, color: Colors.blue),
-            const SizedBox(height: 20),
-            const Text(
-              'تم إنشاء الفاتورة بنجاح',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            const Icon(
+              Icons.check_circle,
+              color: Colors.green,
+              size: 60,
             ),
             const SizedBox(height: 10),
-            Text('رقم الطلب: ${order.id}'),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: () async {
-                try {
-                  // Generate PDF only when user clicks print
-                  final pdfBytes = await _generateSimplePdf(PdfPageFormat.roll80);
+            const Text(
+              'تمت العملية بنجاح',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            
+            // Visual Receipt Card
+            Container(
+              width: 350, // Fixed width like a paper receipt
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                   const Text(
+                    'POS System',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Order #${order.id}',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  Text(
+                    dateFormat.format(order.orderDate),
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const Divider(height: 30, thickness: 1),
                   
-                  // Open Android Print Dialog directly
-                  await Printing.layoutPdf(
-                    onLayout: (PdfPageFormat format) async => pdfBytes,
-                    name: 'Receipt_${order.id}',
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error printing: $e')),
-                  );
-                }
-              },
-              icon: const Icon(Icons.print),
-              label: const Text('طباعة الفاتورة الآن'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                textStyle: const TextStyle(fontSize: 18),
+                  // Items Table
+                  Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(4),
+                      1: FlexColumnWidth(1), 
+                      2: FlexColumnWidth(2),
+                    },
+                    children: [
+                      const TableRow(
+                        children: [
+                          Text('الصنف', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('عدد', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('سعر', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const TableRow(children: [SizedBox(height: 10), SizedBox(height: 10), SizedBox(height: 10)]),
+                      ...items.map((item) => TableRow(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(item.product.name),
+                          ),
+                          Text('${item.quantity}', textAlign: TextAlign.center),
+                          Text(currencyFormat.format(item.total), textAlign: TextAlign.right),
+                        ],
+                      )),
+                    ],
+                  ),
+                  
+                  const Divider(height: 30, thickness: 1),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('المجموع', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        currencyFormat.format(order.totalAmount),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  const Text('شكراً لزيارتكم', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 20), // Space for "paper tear" effect
+                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Future<Uint8List> _generateSimplePdf(PdfPageFormat format) async {
-    final pdf = pw.Document();
-    final font = pw.Font.courier();
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: format,
-        build: (pw.Context context) {
-          return pw.Center(
-            child: pw.Column(
-              mainAxisSize: pw.MainAxisSize.min,
-              children: [
-                pw.Text('TEST RECEIPT', style: pw.TextStyle(font: font, fontSize: 20)),
-                pw.SizedBox(height: 10),
-                pw.Text('Order ID: ${order.id}', style: pw.TextStyle(font: font)),
-                pw.SizedBox(height: 10),
-                pw.Text('Total: \$${order.totalAmount}', style: pw.TextStyle(font: font)),
-                pw.SizedBox(height: 20),
-                // Try to print item count only
-                pw.Text('Items Count: ${items.length}', style: pw.TextStyle(font: font)),
-              ],
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(20),
+        color: Colors.white,
+        child: ElevatedButton(
+          onPressed: () => _finishOrder(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
-          );
-        },
+          ),
+          child: const Text(
+            'طلب جديد',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+        ),
       ),
     );
+  }
 
-    return pdf.save();
+  void _finishOrder(BuildContext context) {
+    context.read<OrderCubit>().startNewOrder();
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }
+
